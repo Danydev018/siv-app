@@ -2,6 +2,7 @@ import { useState } from "preact/hooks";
 import preactLogo from "./assets/preact.svg";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
+import Database from "@tauri-apps/plugin-sql";
 
 function App() {
   const [greetMsg, setGreetMsg] = useState("");
@@ -9,6 +10,15 @@ function App() {
 
   async function greet() {
     // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+    const db = await Database.load("sqlite:test.db");
+
+    db.execute(
+      "CREATE TABLE IF NOT EXISTS greetings (id INTEGER PRIMARY KEY, message TEXT)",
+    );
+
+    db.execute("INSERT INTO greetings (message) VALUES (?)", [name]);
+    const rows = await db.select("SELECT * FROM greetings");
+    console.log("Database rows:", rows);
     setGreetMsg(await invoke("greet", { name }));
   }
 
