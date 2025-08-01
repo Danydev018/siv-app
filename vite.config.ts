@@ -1,13 +1,23 @@
 import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 import preact from "@preact/preset-vite";
+import { join } from "path";
+import { tanstackRouter } from '@tanstack/router-plugin/vite'
 
-// @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+console.log(join(import.meta.dirname, "src"));
 // https://vitejs.dev/config/
-export default defineConfig(async () => ({
-  plugins: [preact()],
-
+export default defineConfig({
+  plugins: [tanstackRouter({
+      target: 'react',
+      autoCodeSplitting: true,
+    }), preact(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": join(import.meta.dirname, "src"),
+    }
+  },
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent vite from obscuring rust errors
@@ -29,4 +39,4 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
-}));
+});

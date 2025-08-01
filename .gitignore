@@ -24,3 +24,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+package-lock.json
+src/routeTree.gen.ts
+package-lock.json
