@@ -26,5 +26,13 @@
     }
   },
   "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "references": [
+    {
+      "path": "./tsconfig.node.json",
+      "react": ["./node_modules/preact/compat"],
+      "react/*": ["./node_modules/preact/compat/*"],
+      "react-dom": ["./node_modules/preact/compat"],
+      "react-dom/*": ["./node_modules/preact/compat/*"]
+    }
+  ]
 }
