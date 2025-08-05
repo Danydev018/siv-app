@@ -27,7 +27,8 @@ interface Event {
   date: string;  
   time: string;  
   color?: string;  
-}  
+  scope?: 'personal' | 'national' | 'worldwide';  
+}
   
 function Calendar() {  
   const [currentDate, setCurrentDate] = useState(new Date());  
@@ -118,6 +119,8 @@ function Calendar() {
   //Base de datos
   const initDatabase = async () => {  
     const db = await Database.load('sqlite:siv.db');  
+      
+    // Crear tabla original si no existe  
     await db.execute(`  
       CREATE TABLE IF NOT EXISTS events (  
         id TEXT PRIMARY KEY,  
@@ -128,6 +131,15 @@ function Calendar() {
         color TEXT DEFAULT '#3b82f6'  
       )  
     `);  
+      
+    // Agregar columna scope si no existe  
+    try {  
+      await db.execute(`ALTER TABLE events ADD COLUMN scope TEXT DEFAULT 'personal'`);  
+    } catch (error) {  
+      // La columna ya existe, ignorar error  
+      console.log('Column scope already exists');  
+    }  
+      
     return db;  
   };
 
@@ -138,13 +150,94 @@ function Calendar() {
   const loadEvents = async () => {  
     try {  
       const db = await initDatabase();  
-      const result = await db.select('SELECT * FROM events');  
-      setEvents(result as Event[]);  
+      const personalEvents = await db.select('SELECT * FROM events WHERE scope = "personal" OR scope IS NULL');  
+        
+      const currentYear = new Date().getFullYear();  
+      const nationalHolidays = await fetchNationalHolidays(currentYear);  
+        
+      // Combinar todos los eventos  
+      const allEvents = [  
+        ...personalEvents,  
+        ...nationalHolidays  
+      ];  
+        
+      setEvents(allEvents as Event[]);  
     } catch (error) {  
       console.error('Error loading events:', error);  
     }  
   }; 
   
+  const fetchNationalHolidays = async (year: number) => {  
+    try {  
+      const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/VE`);  
+      const holidays = await response.json();  
+      return holidays.map((holiday: any) => ({  
+        id: `national-${holiday.date}`,  
+        title: holiday.localName || holiday.name, // Usar localName primero  
+        description: `Día feriado nacional: ${holiday.localName || holiday.name}`,  
+        date: holiday.date,  
+        time: "00:00",  
+        color: "#f59e0b",  
+        scope: "national"  
+      }));  
+    } catch (error) {  
+      console.error('Error fetching national holidays:', error);  
+      return [];  
+    }  
+  };  
+  
+  const fetchWorldwideEvents = async (year: number) => {  
+    // Implementar con Calendarific u otra API  
+    // Requiere API key para eventos internacionales más completos  
+    const worldEvents = [  
+      {  
+        id: `worldwide-${year}-01-01`,  
+        title: "Año Nuevo",  
+        description: "Celebración mundial del Año Nuevo",  
+        date: `${year}-01-01`,  
+        time: "00:00",  
+        color: "#ef4444", // Rojo para mundiales  
+        scope: "worldwide"  
+      },  
+      // Agregar más eventos mundiales conocidos  
+    ];  
+    return worldEvents;  
+  };
+
+  const cacheHolidays = async (holidays: Event[], year: number) => {  
+    const db = await Database.load('sqlite:siv.db');  
+      
+    // Crear tabla para cache si no existe  
+    await db.execute(`  
+      CREATE TABLE IF NOT EXISTS holiday_cache (  
+        id TEXT PRIMARY KEY,  
+        year INTEGER,  
+        data TEXT,  
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP  
+      )  
+    `);  
+      
+    // Guardar holidays del año  
+    await db.execute(  
+      'INSERT OR REPLACE INTO holiday_cache (id, year, data) VALUES (?, ?, ?)',  
+      [`holidays-${year}`, year, JSON.stringify(holidays)]  
+    );  
+  };  
+    
+  const getCachedHolidays = async (year: number) => {  
+    const db = await Database.load('sqlite:siv.db');  
+    const result = await db.select(  
+      'SELECT data FROM holiday_cache WHERE year = ? AND created_at > datetime("now", "-30 days")',  
+      [year]  
+    );  
+      
+    if (result.length > 0) {  
+      return JSON.parse(result[0].data);  
+    }  
+    return null;  
+  };
+
+
   const formatDateForInput = (date: Date, day: number) => {  
     const year = date.getFullYear();  
     const month = String(date.getMonth() + 1).padStart(2, '0');  
