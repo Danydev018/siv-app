@@ -66,6 +66,10 @@ function Calendar() {
     { name: "Púrpura", value: "#8b5cf6" },  
     { name: "Rosa", value: "#ec4899" },  
   ];  
+
+  useEffect(() => {  
+    loadEvents();  
+  }, [currentDate.getFullYear()]);
   
   const getDaysInMonth = (date: Date) => {  
     const year = date.getFullYear();  
@@ -152,13 +156,14 @@ function Calendar() {
       const db = await initDatabase();  
       const personalEvents = await db.select('SELECT * FROM events WHERE scope = "personal" OR scope IS NULL');  
         
-      const currentYear = new Date().getFullYear();  
-      const nationalHolidays = await fetchNationalHolidays(currentYear);  
+      const selectedYear = currentDate.getFullYear(); // Usar el año del calendario  
+      const nationalHolidays = await fetchNationalHolidays(selectedYear);  
+      const worldwideEvents = await fetchWorldwideEvents(selectedYear);  
         
-      // Combinar todos los eventos  
       const allEvents = [  
         ...personalEvents,  
-        ...nationalHolidays  
+        ...nationalHolidays,  
+        ...worldwideEvents  
       ];  
         
       setEvents(allEvents as Event[]);  
@@ -187,8 +192,7 @@ function Calendar() {
   };  
   
   const fetchWorldwideEvents = async (year: number) => {  
-    // Implementar con Calendarific u otra API  
-    // Requiere API key para eventos internacionales más completos  
+    // Eventos mundiales conocidos  
     const worldEvents = [  
       {  
         id: `worldwide-${year}-01-01`,  
@@ -199,7 +203,42 @@ function Calendar() {
         color: "#ef4444", // Rojo para mundiales  
         scope: "worldwide"  
       },  
-      // Agregar más eventos mundiales conocidos  
+      {  
+        id: `worldwide-${year}-02-14`,  
+        title: "Día de San Valentín",  
+        description: "Día Internacional del Amor y la Amistad",  
+        date: `${year}-02-14`,  
+        time: "00:00",  
+        color: "#ef4444",  
+        scope: "worldwide"  
+      },  
+      {  
+        id: `worldwide-${year}-03-08`,  
+        title: "Día Internacional de la Mujer",  
+        description: "Día Internacional de la Mujer",  
+        date: `${year}-03-08`,  
+        time: "00:00",  
+        color: "#ef4444",  
+        scope: "worldwide"  
+      },  
+      {  
+        id: `worldwide-${year}-04-22`,  
+        title: "Día de la Tierra",  
+        description: "Día Mundial de la Tierra",  
+        date: `${year}-04-22`,  
+        time: "00:00",  
+        color: "#ef4444",  
+        scope: "worldwide"  
+      },  
+      {  
+        id: `worldwide-${year}-12-25`,  
+        title: "Navidad",  
+        description: "Celebración mundial de la Navidad",  
+        date: `${year}-12-25`,  
+        time: "00:00",  
+        color: "#ef4444",  
+        scope: "worldwide"  
+      }  
     ];  
     return worldEvents;  
   };
@@ -541,9 +580,11 @@ function Calendar() {
                             style={{ backgroundColor: event.color || "#3b82f6" }}  
                             onClick={() => openEventDetails(event)}  
                           >  
+                            {event.scope === 'national' && '🇻🇪 '}  
+                            {event.scope === 'worldwide' && '🌍 '}  
                             {event.title}  
                           </div>  
-                        ))}  
+                        ))} 
                           
                         {getEventsForDay(dayObj.day).length > 3 && (  
                           <div className="text-xs text-muted-foreground px-2 py-1">  
