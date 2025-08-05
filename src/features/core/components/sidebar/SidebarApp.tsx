@@ -112,20 +112,12 @@ const data = {
     },  
     {  
       title: "Calendar", // ← Agregar este nuevo elemento  
-      url: "/calendar",  
+      url: "/calendar/calendar",  
       icon: Calendar,  
       items: [  
         {  
-          title: "View Calendar",  
-          url: "/calendar",  
-        },  
-        {  
-          title: "Events",  
-          url: "/calendar/events",  
-        },  
-        {  
-          title: "Schedule",  
-          url: "/calendar/schedule",  
+          title: "Notifications", // Nuevo sub-item  
+          url: "/calendar/notifications",  
         },  
       ],  
     },  

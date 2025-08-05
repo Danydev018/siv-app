@@ -16,7 +16,7 @@ import {
 import { Separator } from "@/components/ui/separator";  
 import { SidebarTrigger } from "@/components/ui/sidebar";  
   
-export const Route = createFileRoute("/calendar")({  
+export const Route = createFileRoute("/calendar/calendar")({  
   component: Calendar,  
 });  
   
@@ -143,6 +143,18 @@ function Calendar() {
       // La columna ya existe, ignorar error  
       console.log('Column scope already exists');  
     }  
+
+    await db.execute(`  
+      CREATE TABLE IF NOT EXISTS notifications (  
+        id TEXT PRIMARY KEY,  
+        event_id TEXT NOT NULL,  
+        type TEXT NOT NULL,  
+        message TEXT NOT NULL,  
+        is_read BOOLEAN DEFAULT FALSE,  
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,  
+        FOREIGN KEY (event_id) REFERENCES events (id)  
+      )  
+    `);  
       
     return db;  
   };
@@ -275,6 +287,109 @@ function Calendar() {
     }  
     return null;  
   };
+
+  //logica de notificaciones para calendario
+  // Función para calcular eventos próximos  
+  const getUpcomingEvents = () => {  
+    const today = new Date();  
+    const threeDaysFromNow = new Date(today.getTime() + (3 * 24 * 60 * 60 * 1000));  
+    const oneDayFromNow = new Date(today.getTime() + (1 * 24 * 60 * 60 * 1000));  
+      
+    return events.filter(event => {  
+      const eventDate = new Date(event.date);  
+      return eventDate >= today && eventDate <= threeDaysFromNow;  
+    });  
+  };  
+    
+  // Función para generar notificaciones  
+  const generateNotifications = () => {  
+    const today = new Date();  
+    const threeDaysFromNow = new Date(today.getTime() + (3 * 24 * 60 * 60 * 1000));  
+    const oneDayFromNow = new Date(today.getTime() + (1 * 24 * 60 * 60 * 1000));  
+      
+    const notifications = [];  
+      
+    events.forEach(event => {  
+      const eventDate = new Date(event.date);  
+      const todayStr = today.toISOString().split('T')[0];  
+      const threeDaysStr = threeDaysFromNow.toISOString().split('T')[0];  
+      const oneDayStr = oneDayFromNow.toISOString().split('T')[0];  
+        
+      // Notificación 3 días antes  
+      if (event.date === threeDaysStr) {  
+        notifications.push({  
+          id: `3days-${event.id}`,  
+          type: '3-days',  
+          event: event,  
+          message: `Recordatorio: ${event.title} en 3 días`  
+        });  
+      }  
+        
+      // Notificación 1 día antes  
+      if (event.date === oneDayStr) {  
+        notifications.push({  
+          id: `1day-${event.id}`,  
+          type: '1-day',  
+          event: event,  
+          message: `Recordatorio: ${event.title} mañana`  
+        });  
+      }  
+    });  
+      
+    return notifications;  
+  };
+
+  useEffect(() => {  
+    // Solicitar permisos de notificación al cargar el componente  
+    if ('Notification' in window && Notification.permission === 'default') {  
+      Notification.requestPermission();  
+    }  
+  }, []);
+
+  useEffect(() => {  
+    // Verificar notificaciones al cargar el componente  
+    checkAndCreateNotifications();  
+      
+    // Configurar verificación diaria  
+    const interval = setInterval(checkAndCreateNotifications, 24 * 60 * 60 * 1000); // 24 horas  
+      
+    return () => clearInterval(interval);  
+  }, [events]);  
+    
+  const checkAndCreateNotifications = async () => {  
+    const notifications = generateNotifications();  
+      
+    try {  
+      const db = await Database.load('sqlite:siv.db');  
+        
+      for (const notification of notifications) {  
+        // Verificar si la notificación ya existe  
+        const existing = await db.select(  
+          'SELECT id FROM notifications WHERE id = ?',  
+          [notification.id]  
+        );  
+          
+        if (existing.length === 0) {  
+          // Crear nueva notificación  
+          await db.execute(  
+            'INSERT INTO notifications (id, event_id, type, message) VALUES (?, ?, ?, ?)',  
+            [notification.id, notification.event.id, notification.type, notification.message]  
+          );  
+            
+          // Mostrar notificación del sistema (opcional)  
+          if ('Notification' in window && Notification.permission === 'granted') {  
+            new Notification(notification.message, {  
+              body: `${notification.event.date} a las ${notification.event.time}`,  
+              icon: '/calendar-icon.png' // Agregar icono si tienes uno  
+            });  
+          }  
+        }  
+      }  
+    } catch (error) {  
+      console.error('Error creating notifications:', error);  
+    }  
+  };
+
 
 
   const formatDateForInput = (date: Date, day: number) => {  
