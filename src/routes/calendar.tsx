@@ -42,8 +42,18 @@ function Calendar() {
     date: "",  
     time: "",  
     color: "#3b82f6",  
-  });  
+  }); 
   
+  const resetForm = () => {  
+    setFormData({   
+        title: "",   
+        description: "",   
+        date: "",   
+        time: "",   
+        color: "#3b82f6"   
+    });  
+  };
+    
   const eventColors = [  
     { name: "Azul", value: "#3b82f6" },  
     { name: "Verde", value: "#10b981" },  
@@ -61,14 +71,42 @@ function Calendar() {
     const daysInMonth = lastDay.getDate();  
     const startingDayOfWeek = firstDay.getDay();  
   
+    // Obtener días del mes anterior  
+    const prevMonth = new Date(year, month - 1, 0);  
+    const daysInPrevMonth = prevMonth.getDate();  
+  
     const days = [];  
       
-    for (let i = 0; i < startingDayOfWeek; i++) {  
-      days.push(null);  
+    // Días del mes anterior (desvanecidos)  
+    for (let i = startingDayOfWeek - 1; i >= 0; i--) {  
+      days.push({  
+        day: daysInPrevMonth - i,  
+        isCurrentMonth: false,  
+        isPrevMonth: true,  
+        isNextMonth: false  
+      });  
     }  
       
+    // Días del mes actual  
     for (let day = 1; day <= daysInMonth; day++) {  
-      days.push(day);  
+      days.push({  
+        day: day,  
+        isCurrentMonth: true,  
+        isPrevMonth: false,  
+        isNextMonth: false  
+      });  
+    }  
+      
+    // Días del mes siguiente para completar la grilla (42 casillas = 6 semanas)  
+    const totalCells = 42;  
+    const remainingCells = totalCells - days.length;  
+    for (let day = 1; day <= remainingCells; day++) {  
+      days.push({  
+        day: day,  
+        isCurrentMonth: false,  
+        isPrevMonth: false,  
+        isNextMonth: true  
+      });  
     }  
       
     return days;  
@@ -90,7 +128,7 @@ function Calendar() {
     const today = new Date();  
     const checkDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);  
     return checkDate.toDateString() === today.toDateString();  
-  };  
+  }; 
   
   const handleCreateEvent = () => {  
     if (formData.title && formData.date && formData.time) {  
@@ -201,11 +239,28 @@ function Calendar() {
               </Button>  
             </div>  
               
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>  
+            <Dialog   
+                open={isCreateDialogOpen}   
+                onOpenChange={(open) => {  
+                    setIsCreateDialogOpen(open);  
+                    if (!open) resetForm();  
+                }}  
+            > 
               <DialogTrigger asChild>  
-                <Button className="gap-2">  
-                  <Plus className="h-4 w-4" />  
-                  Crear  
+                <Button   
+                    className="gap-2"  
+                    onClick={() => {  
+                    const today = new Date();  
+                    const todayStr = today.toISOString().split('T')[0];  
+                    setFormData({  
+                        ...formData,  
+                        date: todayStr,  
+                        time: "09:00"  
+                    });  
+                    }}  
+                >  
+                    <Plus className="h-4 w-4" />  
+                    Crear Evento
                 </Button>  
               </DialogTrigger>  
               <DialogContent className="sm:max-w-md">  
@@ -300,59 +355,64 @@ function Calendar() {
             ))}  
               
             {/* Días del mes */}  
-            {getDaysInMonth(currentDate).map((day, index) => (  
+            {getDaysInMonth(currentDate).map((dayObj, index) => (  
               <div  
                 key={index}  
-                className={`min-h-[120px] border-r border-b border-border relative group hover:bg-accent/30 transition-colors ${  
-                  !day ? 'bg-muted/20' : ''  
+                className={`min-h-[120px] border-r border-b border-border relative group hover:bg-accent/70 transition-colors ${  
+                  !dayObj.isCurrentMonth ? 'bg-muted/20' : ''  
                 } ${  
-                  day && index % 7 === 0 || index % 7 === 6 ? 'bg-muted/10' : ''  
+                  dayObj.isCurrentMonth && (index % 7 === 0 || index % 7 === 6) ? 'bg-muted/10' : ''  
                 }`}  
               >  
-                {day && (  
-                  <>  
-                    <div className={`p-2 text-sm ${  
-                      isToday(day)   
-                        ? 'bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center font-medium m-1'   
-                        : 'font-normal text-foreground'  
-                    }`}>  
-                      {day}  
-                    </div>  
-                      
-                    <div className="px-1 space-y-1">  
-                      {getEventsForDay(day).slice(0, 3).map(event => (  
-                        <div  
-                          key={event.id}  
-                          className="text-xs px-2 py-1 rounded text-white cursor-pointer hover:opacity-80 transition-opacity truncate"  
-                          style={{ backgroundColor: event.color || "#3b82f6" }}  
-                          onClick={() => openEventDetails(event)}  
-                        >  
-                          {event.title}  
-                        </div>  
-                      ))}  
+                <>  
+                  <div className={`p-2 text-sm ${  
+                    dayObj.isCurrentMonth && isToday(dayObj.day)   
+                      ? 'bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center font-medium m-1'   
+                      : dayObj.isCurrentMonth   
+                        ? 'font-normal text-foreground'  
+                        : 'font-normal text-muted-foreground/50'  
+                  }`}>  
+                    {dayObj.day}  
+                  </div>  
+                    
+                  {dayObj.isCurrentMonth && (  
+                    <>  
+                      <div className="px-1 space-y-1">  
+                        {getEventsForDay(dayObj.day).slice(0, 3).map(event => (  
+                          <div  
+                            key={event.id}  
+                            className="text-xs px-2 py-1 rounded text-white cursor-pointer hover:opacity-80 transition-opacity truncate"  
+                            style={{ backgroundColor: event.color || "#3b82f6" }}  
+                            onClick={() => openEventDetails(event)}  
+                          >  
+                            {event.title}  
+                          </div>  
+                        ))}  
+                          
+                        {getEventsForDay(dayObj.day).length > 3 && (  
+                          <div className="text-xs text-muted-foreground px-2 py-1">  
+                            +{getEventsForDay(dayObj.day).length - 3} más  
+                          </div>  
+                        )}  
+                      </div>  
                         
-                      {getEventsForDay(day).length > 3 && (  
-                        <div className="text-xs text-muted-foreground px-2 py-1">  
-                          +{getEventsForDay(day).length - 3} más  
-                        </div>  
-                      )}  
-                    </div>  
-                      
-                    {/* Botón flotante para agregar evento */}  
-                    <button  
-                      className="absolute bottom-2 right-2 w-6 h-6 bg-primary text-primary-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs hover:bg-primary/90"  
-                      onClick={() => {  
-                        setFormData({  
-                          ...formData,  
-                          date: formatDateForInput(currentDate, day)  
-                        });  
-                        setIsCreateDialogOpen(true);  
-                      }}  
-                    >  
-                      <Plus className="h-3 w-3" />  
-                    </button>  
-                  </>  
-                )}  
+                      {/* Botón flotante para agregar evento */}  
+                      <button  
+                        className="absolute bottom-2 right-2 w-6 h-6 bg-primary text-primary-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs hover:bg-primary/90"  
+                        onClick={() => {  
+                            setFormData({  
+                            ...formData,  
+                            date: formatDateForInput(currentDate, dayObj.day),  
+                            time: "09:00" // Hora por defecto  
+                            });  
+                            setIsCreateDialogOpen(true);  
+                        }}  
+                        >  
+                        <Plus className="h-3 w-3" />  
+                      </button>  
+                    </>  
+                  )}  
+                </>  
               </div>  
             ))}  
           </div>  
