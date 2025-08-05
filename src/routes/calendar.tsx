@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";  
-import { useState } from "react";  
+import { useState, useEffect } from "react";  
+import Database from '@tauri-apps/plugin-sql';
 import { Button } from "@/components/ui/button";  
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";  
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Plus, ChevronLeft, ChevronRight, Edit, Trash2, MoreHorizontal } from "lucide-react";   
 import { Input } from "@/components/ui/input";  
 import { Label } from "@/components/ui/label";  
 import { Textarea } from "@/components/ui/textarea";  
-import { Plus, ChevronLeft, ChevronRight, Edit, Trash2, MoreHorizontal } from "lucide-react";  
 import {  
   Breadcrumb,  
   BreadcrumbItem,  
@@ -35,6 +36,7 @@ function Calendar() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);  
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);  
   const [isEditMode, setIsEditMode] = useState(false);  
+  const [isDateEditable, setIsDateEditable] = useState(true);
   
   const [formData, setFormData] = useState({  
     title: "",  
@@ -46,12 +48,13 @@ function Calendar() {
   
   const resetForm = () => {  
     setFormData({   
-        title: "",   
-        description: "",   
-        date: "",   
-        time: "",   
-        color: "#3b82f6"   
+      title: "",   
+      description: "",   
+      date: "",   
+      time: "",   
+      color: "#3b82f6"   
     });  
+    setIsDateEditable(true); // Resetear a editable por defecto  
   };
     
   const eventColors = [  
@@ -111,6 +114,36 @@ function Calendar() {
       
     return days;  
   };  
+
+  //Base de datos
+  const initDatabase = async () => {  
+    const db = await Database.load('sqlite:siv.db');  
+    await db.execute(`  
+      CREATE TABLE IF NOT EXISTS events (  
+        id TEXT PRIMARY KEY,  
+        title TEXT NOT NULL,  
+        description TEXT,  
+        date TEXT NOT NULL,  
+        time TEXT NOT NULL,  
+        color TEXT DEFAULT '#3b82f6'  
+      )  
+    `);  
+    return db;  
+  };
+
+  useEffect(() => {  
+    loadEvents();  
+  }, []);  
+  
+  const loadEvents = async () => {  
+    try {  
+      const db = await initDatabase();  
+      const result = await db.select('SELECT * FROM events');  
+      setEvents(result as Event[]);  
+    } catch (error) {  
+      console.error('Error loading events:', error);  
+    }  
+  }; 
   
   const formatDateForInput = (date: Date, day: number) => {  
     const year = date.getFullYear();  
@@ -130,36 +163,64 @@ function Calendar() {
     return checkDate.toDateString() === today.toDateString();  
   }; 
   
-  const handleCreateEvent = () => {  
+  const handleCreateEvent = async () => {  
     if (formData.title && formData.date && formData.time) {  
       const newEvent: Event = {  
         id: Date.now().toString(),  
         ...formData,  
       };  
-      setEvents([...events, newEvent]);  
-      setFormData({ title: "", description: "", date: "", time: "", color: "#3b82f6" });  
-      setIsCreateDialogOpen(false);  
+        
+      try {  
+        const db = await Database.load('sqlite:siv.db');  
+        await db.execute(  
+          'INSERT INTO events (id, title, description, date, time, color) VALUES (?, ?, ?, ?, ?, ?)',  
+          [newEvent.id, newEvent.title, newEvent.description, newEvent.date, newEvent.time, newEvent.color]  
+        );  
+          
+        setEvents([...events, newEvent]);  
+        setFormData({ title: "", description: "", date: "", time: "", color: "#3b82f6" });  
+        setIsCreateDialogOpen(false);  
+      } catch (error) {  
+        console.error('Error creating event:', error);  
+      }  
     }  
   };  
   
-  const handleEditEvent = () => {  
+  const handleEditEvent = async () => {  
     if (selectedEvent && formData.title && formData.date && formData.time) {  
-      setEvents(events.map(event =>   
-        event.id === selectedEvent.id   
-          ? { ...selectedEvent, ...formData }  
-          : event  
-      ));  
-      setIsEditMode(false);  
+      try {  
+        const db = await Database.load('sqlite:siv.db');  
+        await db.execute(  
+          'UPDATE events SET title = ?, description = ?, date = ?, time = ?, color = ? WHERE id = ?',  
+          [formData.title, formData.description, formData.date, formData.time, formData.color, selectedEvent.id]  
+        );  
+          
+        setEvents(events.map(event =>   
+          event.id === selectedEvent.id   
+            ? { ...selectedEvent, ...formData }  
+            : event  
+        ));  
+        setIsEditMode(false);  
+        setIsViewDialogOpen(false);  
+        setSelectedEvent(null);  
+      } catch (error) {  
+        console.error('Error updating event:', error);  
+      }  
+    }  
+  };  
+  
+  const handleDeleteEvent = async (eventId: string) => {  
+    try {  
+      const db = await Database.load('sqlite:siv.db');  
+      await db.execute('DELETE FROM events WHERE id = ?', [eventId]);  
+        
+      setEvents(events.filter(event => event.id !== eventId));  
       setIsViewDialogOpen(false);  
       setSelectedEvent(null);  
+    } catch (error) {  
+      console.error('Error deleting event:', error);  
     }  
-  };  
-  
-  const handleDeleteEvent = (eventId: string) => {  
-    setEvents(events.filter(event => event.id !== eventId));  
-    setIsViewDialogOpen(false);  
-    setSelectedEvent(null);  
-  };  
+  }; 
   
   const openEventDetails = (event: Event) => {  
     setSelectedEvent(event);  
@@ -250,13 +311,14 @@ function Calendar() {
                 <Button   
                     className="gap-2"  
                     onClick={() => {  
-                    const today = new Date();  
-                    const todayStr = today.toISOString().split('T')[0];  
-                    setFormData({  
+                      const today = new Date();  
+                      const todayStr = today.toISOString().split('T')[0];  
+                      setFormData({  
                         ...formData,  
                         date: todayStr,  
                         time: "09:00"  
-                    });  
+                      });  
+                      setIsDateEditable(true); // Permitir edición  
                     }}  
                 >  
                     <Plus className="h-4 w-4" />  
@@ -286,6 +348,7 @@ function Calendar() {
                         value={formData.date}  
                         onChange={(e) => setFormData({...formData, date: e.target.value})}  
                         className="mt-1"  
+                        disabled={!isDateEditable}  
                       />  
                     </div>  
                     <div>  
@@ -400,12 +463,13 @@ function Calendar() {
                       <button  
                         className="absolute bottom-2 right-2 w-6 h-6 bg-primary text-primary-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs hover:bg-primary/90"  
                         onClick={() => {  
-                            setFormData({  
+                          setFormData({  
                             ...formData,  
                             date: formatDateForInput(currentDate, dayObj.day),  
-                            time: "09:00" // Hora por defecto  
-                            });  
-                            setIsCreateDialogOpen(true);  
+                            time: "09:00"  
+                          });  
+                          setIsDateEditable(false); // Deshabilitar edición  
+                          setIsCreateDialogOpen(true);  
                         }}  
                         >  
                         <Plus className="h-3 w-3" />  
